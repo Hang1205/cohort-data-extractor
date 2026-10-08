@@ -1,3 +1,12 @@
+# v1.1.0
+
+- File choices moved to the main screen with Filter by ID, Copy whole file and Exclude.
+- Add chosen CSV/Excel files or another folder; configure a separate column/sheet for each.
+- Missing/unusable IDs start excluded; GUI defaults to audited skips of invalid headers.
+- Whole files copied in cancellable chunks to supporting_files/, marked unfiltered and excluded from cohort coverage.
+- Additional source folders have distinct output namespaces; all input files and the selected list must remain stable during extraction.
+- 43 engine tests, GUI demo and frozen portable tests.
+
 # Changelog
 
 ## 1.0.0 — 2026-10-08

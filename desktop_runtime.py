@@ -60,7 +60,7 @@ def desktop_main(factory):
 def run_self_test(test):
     # This mode processes only built-in fictional fixtures. Its test failures may
     # include module names to diagnose packaging; normal-use diagnostics never do.
-    result={'app_version':'1.0.0','status':'failed','frozen':bool(getattr(sys,'frozen',False))}
+    result={'app_version':'1.1.0','status':'failed','frozen':bool(getattr(sys,'frozen',False))}
     code=1
     try:
         result.update(test());result['status']='passed';code=0

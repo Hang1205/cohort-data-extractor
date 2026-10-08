@@ -1,7 +1,5 @@
-# Version 1.0.0 local validation
+# v1.1.0 verification
 
-40 synthetic engine tests passed on Windows with Python 3.12. Tests cover arbitrary cohort sizes, entity/customer IDs, separate file columns, Excel worksheets, literal ID handling, explicit normalization, collisions, header/encoding choices, exclusions, sample matching, cancellation and failure without completed output.
+Synthetic data only. 43 engine tests and the threaded GUI demo pass. Mixed-source tests cover direct ID filtering, missing-ID skipping, byte-for-byte whole copies, duplicate filenames and whole-copy exclusion from ID coverage. Portable Windows x64 self-test runs with external Python paths disabled and blocks network connections during the test. Complete source and dependency libraries are included; archive manifests are checked after extraction to a folder containing spaces.
 
-The bundled demo has five selected IDs and nine expected output records. GUI and frozen-executable tests use fictional data only. The Windows runtime and relocated ZIP are checked without external Python. Actual macOS/Linux and institutional workstation execution remain unverified.
-
-This is local functional verification of table extraction. No real clinical, customer or other private datasets are included or evaluated.
+Institutional U: drive data was not accessed. No relational linking-table joins are implemented. Windows executable is unsigned. Mac/Linux execution is not verified.

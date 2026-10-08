@@ -7,6 +7,7 @@ from extract_core import ExtractionError,extract,ID_MODES
 
 def main():
     parser=argparse.ArgumentParser(description='Extract selected ids from every source CSV/TSV export, offline.')
+    parser.add_argument('--source-file',action='append',default=[],help='Additional file from any folder; repeat for multiple files')
     parser.add_argument('--source',required=True,help='source export folder')
     parser.add_argument('--ids',required=True,help='CSV/TSV or XLSX selected-id list')
     parser.add_argument('--output',required=True,help='New output folder outside the source')
@@ -43,7 +44,7 @@ def main():
                        delimiter=args.delimiter,selection_delimiter=args.selection_delimiter,recursive=args.recursive,
                        selection_header_row=args.selection_header_row,source_header_row=args.source_header_row,
                        filter_column=args.filter_column,filter_values=args.filter_values,include_patterns=args.include,exclude_patterns=args.exclude,
-                       strict_headers=args.strict_headers,skip_invalid_files=args.skip_invalid_files,file_options=file_options,id_mode=args.id_mode)
+                       strict_headers=args.strict_headers,skip_invalid_files=args.skip_invalid_files,file_options=file_options,id_mode=args.id_mode,source_files=args.source_file)
         print(json.dumps({key:result[key] for key in ['status','selected_unique_ids','ids_found_anywhere','ids_missing_everywhere','total_rows_scanned','total_rows_selected']},indent=2))
         return 0
     except (ExtractionError,OSError,UnicodeError) as error:

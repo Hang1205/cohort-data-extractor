@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import csv
 import fnmatch
 import gzip
+import hashlib
 import json
 from itertools import islice
 from pathlib import Path
@@ -17,7 +18,7 @@ import time
 import zipfile
 from uuid import uuid4
 
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 BASE = Path(__file__).resolve().parent
 APP_HOME = Path(sys.executable).resolve().parent if getattr(sys,'frozen',False) else BASE
 if (BASE / 'vendor').is_dir():
@@ -284,7 +285,20 @@ def load_selection(path, column='record_id', sheet='', encoding='utf-8-sig', del
     return Selection(ids,total,duplicates,blanks,headers[index],actual_sheet,actual_header,filtered_out)
 
 
-def discover_tables(folder, selection_path=None, recursive=False):
+def relative_name(path, folder):
+    path=Path(path).resolve();folder=Path(folder).resolve()
+    if path.is_relative_to(folder):return path.relative_to(folder)
+    namespace=path.parent.name+'_'+hashlib.sha256(str(path.parent).casefold().encode()).hexdigest()[:8]
+    return Path('additional_sources')/namespace/path.name
+
+
+def source_path(name, folder, source_files=()):
+    for path in source_files or ():
+        if relative_name(path,folder).as_posix()==name:return Path(path).resolve()
+    return Path(folder)/name
+
+
+def discover_tables(folder, selection_path=None, recursive=False, source_files=None):
     folder = Path(folder).resolve()
     if not folder.is_dir():
         raise ExtractionError('Choose the folder containing the source data exports.')
@@ -307,6 +321,13 @@ def discover_tables(folder, selection_path=None, recursive=False):
                 else:
                     ignored.append((path.relative_to(folder).as_posix(),'unsupported file type'))
     visit(folder)
+    for item in source_files or ():
+        path=Path(item).resolve()
+        if path==selection_path:continue
+        if not path.is_file() or path.is_symlink():raise ExtractionError('An additional source file is missing or is a link. Choose it again.')
+        if not (supported(path) or path.suffix.lower()=='.xlsx'):raise ExtractionError('Additional files must be CSV, TSV, gzip tables or XLSX.')
+        if path not in paths:paths.append(path)
+    paths=sorted(paths)
     if not paths:
         raise ExtractionError('No CSV/TSV or .xlsx cohort files were found in the selected folder.')
     return paths,ignored
@@ -320,8 +341,9 @@ def file_chosen(relative, include_patterns='*', exclude_patterns=''):
 
 
 def file_settings(relative, file_options, id_column, header_row, encoding, delimiter):
-    config={'include':True,'column':id_column,'header_row':header_row,'sheet':'','encoding':encoding,'delimiter':delimiter,'id_index':None}
+    config={'include':True,'action':'Filter by ID','column':id_column,'header_row':header_row,'sheet':'','encoding':encoding,'delimiter':delimiter,'id_index':None}
     config.update((file_options or {}).get(relative,{}))
+    if config['action'] not in ('Filter by ID','Copy whole file','Exclude'):raise ExtractionError('Choose a supported file action.')
     header_number(config['header_row'])
     return config
 
@@ -368,14 +390,16 @@ def source_rows(path, config, strict_headers=False):
 
 
 def inspect_tables(folder, selection_path=None, id_column='record_id', encoding='utf-8-sig', delimiter='Auto', recursive=False,
-                   header_row=1, strict_headers=False, include_patterns='*', exclude_patterns='', file_options=None):
-    files,ignored = discover_tables(folder,selection_path,recursive)
+                   header_row=1, strict_headers=False, include_patterns='*', exclude_patterns='', file_options=None, source_files=None):
+    files,ignored = discover_tables(folder,selection_path,recursive,source_files)
     results = []
     for path in files:
-        result = {'file':path.relative_to(Path(folder).resolve()).as_posix(), 'bytes':path.stat().st_size}
+        result = {'file':relative_name(path,folder).as_posix(), 'bytes':path.stat().st_size}
         config=file_settings(result['file'],file_options,id_column,header_row,encoding,delimiter)
-        result['config']=config
-        if not config['include'] or not file_chosen(result['file'],include_patterns,exclude_patterns):
+        result['config']=config;result['path']=str(path)
+        if config['include'] and config['action']=='Copy whole file':
+            result.update(status='copy whole — unfiltered',columns=0);results.append(result);continue
+        if not config['include'] or config['action']=='Exclude' or not file_chosen(result['file'],include_patterns,exclude_patterns):
             result.update(status='excluded by file choices',columns=0);results.append(result);continue
         try:
             headers,sheets,number = selection_layout(path,config['sheet'],config['encoding'],config['delimiter'],not strict_headers,config['header_row'],config['column'])
@@ -390,15 +414,15 @@ def inspect_tables(folder, selection_path=None, id_column='record_id', encoding=
 
 
 def sample_matches(folder, selection, *, file_options=None, id_column='record_id', header_row=1, encoding='utf-8-sig',
-                   delimiter='Auto', recursive=False, selection_path=None, include_patterns='*', exclude_patterns='', id_mode='Exact text', limit=10000):
+                   delimiter='Auto', recursive=False, selection_path=None, include_patterns='*', exclude_patterns='', id_mode='Exact text', limit=10000, source_files=None):
     if not isinstance(limit,int) or limit<1:raise ExtractionError('Sample size must be a positive integer.')
-    results,ignored=inspect_tables(folder,selection_path,id_column,encoding,delimiter,recursive,header_row,False,include_patterns,exclude_patterns,file_options)
+    results,ignored=inspect_tables(folder,selection_path,id_column,encoding,delimiter,recursive,header_row,False,include_patterns,exclude_patterns,file_options,source_files)
     memberships={mode:{match_id(id,mode) for id in selection.ids} for mode in ID_MODES}
     for result in results:
         if result['status']!='ready':continue
         counts={mode:0 for mode in ID_MODES};sampled=0
         try:
-            with source_rows(Path(folder)/result['file'],result['config']) as (headers,index,records,_,_,_):
+            with source_rows(Path(result['path']),result['config']) as (headers,index,records,_,_,_):
                 for row,id in islice(records,limit):
                     if not row:continue
                     if len(row)!=len(headers):raise ExtractionError('Malformed sampled record; check the file delimiter and header row.')
@@ -413,7 +437,7 @@ def extract(folder, selection_path, output, *, selection_column='record_id', id_
             sheet='', encoding='utf-8-sig', selection_encoding=None, delimiter='Auto', selection_delimiter='Auto',
             recursive=False, expected=None, cancel=None, progress=None, selection_header_row=1, source_header_row=1,
             filter_column='', filter_values='', strict_headers=False, include_patterns='*', exclude_patterns='', skip_invalid_files=False,
-            file_options=None, id_mode='Exact text'):
+            file_options=None, id_mode='Exact text', source_files=None):
     cancel = cancel or threading.Event()
     source = Path(folder).resolve()
     selection_path = Path(selection_path).resolve()
@@ -433,12 +457,14 @@ def extract(folder, selection_path, output, *, selection_column='record_id', id_
     if len(selected_lookup)!=len(selection.ids):
         raise ExtractionError('This matching mode merges different selected id IDs. Use Exact text or correct the id list; no output was created.')
     diagnostic_sets={mode:{match_id(id,mode) for id in selection.ids} for mode in ID_MODES[:3]}
-    all_files,ignored = discover_tables(source,selection_path,recursive)
+    all_files,ignored = discover_tables(source,selection_path,recursive,source_files)
+    if any(output==p.parent or p.parent in output.parents or output in p.parents for p in all_files):
+        raise ExtractionError('Choose an output folder outside every source folder.')
     files=[];configs={}
     for path in all_files:
-        relative=path.relative_to(source).as_posix()
+        relative=relative_name(path,source).as_posix()
         configs[path]=file_settings(relative,file_options,id_column,source_header_row,encoding,delimiter)
-        if configs[path]['include'] and file_chosen(relative,include_patterns,exclude_patterns):files.append(path)
+        if configs[path]['include'] and configs[path]['action']!='Exclude' and file_chosen(relative,include_patterns,exclude_patterns):files.append(path)
         else:ignored.append((relative,'excluded by file choices'))
     stamps = {p:(p.stat().st_size,p.stat().st_mtime_ns) for p in files}
     ready=[];layouts={}
@@ -448,16 +474,17 @@ def extract(folder, selection_path, output, *, selection_column='record_id', id_
             raise Cancelled('Cancelled before extraction.')
         try:
             cfg=configs[path]
+            if cfg['action']=='Copy whole file':layouts[path]=0;ready.append(path);continue
             headers,sheets,number = selection_layout(path,cfg['sheet'],cfg['encoding'],cfg['delimiter'],not strict_headers,cfg['header_row'],cfg['column'])
             configured_index(headers,cfg,strict_headers)
             if path.suffix.lower()=='.xlsx':cfg['sheet']=cfg['sheet'] or sheets[0]
             layouts[path]=number;ready.append(path)
         except (ExtractionError,csv.Error,UnicodeError,OSError):
-            if skip_invalid_files:ignored.append((path.relative_to(source).as_posix(),'explicitly skipped: unreadable header / missing or ambiguous ID / encoding'))
+            if skip_invalid_files:ignored.append((relative_name(path,source).as_posix(),'explicitly skipped: unreadable header / missing or ambiguous ID / encoding'))
             else:raise ExtractionError(f'Cannot read the configured ID column in {path.name}. Check its header row, delimiter and encoding. Exclude that file explicitly or use Skip files with invalid headers; no output was created.') from None
     files=ready
     if not files:raise ExtractionError('No readable source files remain after your file choices and header checks. No output was created.')
-    destinations=[(p.relative_to(source).with_suffix('.csv') if p.suffix.lower()=='.xlsx' else p.relative_to(source)).as_posix().casefold() for p in files]
+    destinations=[(('supporting_files/' + relative_name(p,source).as_posix()) if configs[p]['action']=='Copy whole file' else 'data/'+(relative_name(p,source).with_suffix('.csv') if p.suffix.lower()=='.xlsx' else relative_name(p,source)).as_posix()).casefold() for p in files]
     if len(set(destinations))!=len(destinations):raise ExtractionError('Selected files would produce the same output filename (for example table.csv and table.xlsx). Exclude one or rename a source copy.')
     stamps={p:stamps[p] for p in files}
     output.parent.mkdir(parents=True,exist_ok=True)
@@ -474,7 +501,7 @@ def extract(folder, selection_path, output, *, selection_column='record_id', id_
              'selected_sheet':selection.sheet,'selection_header_row':selection.header_row,'selection_rows_filtered_out':selection.filtered_out,
              'filter_column':filter_column,'filter_values':filter_values,'strict_headers':strict_headers,'source_header_row':source_header_row,
              'include_patterns':include_patterns,'exclude_patterns':exclude_patterns,'skip_invalid_files':skip_invalid_files,
-             'id_matching_mode':id_mode,'per_file_options':{p.relative_to(source).as_posix():configs[p] for p in files},
+             'id_matching_mode':id_mode,'per_file_options':{relative_name(p,source).as_posix():configs[p] for p in files},
              'ignored_files':[{'file':name,'reason':reason} for name,reason in ignored],
              'outputs':'Original columns and matching row values retained; no de-identification performed.'}
     coverage = Counter()
@@ -483,13 +510,26 @@ def extract(folder, selection_path, output, *, selection_column='record_id', id_
         for file_index,path in enumerate(files,1):
             if cancel.is_set():
                 raise Cancelled('Cancelled. The incomplete folder is not a completed extraction.')
-            relative = path.relative_to(source)
+            relative = relative_name(path,source)
+            if configs[path]['action']=='Copy whole file':
+                destination=partial/'supporting_files'/relative;destination.parent.mkdir(parents=True,exist_ok=True)
+                copied=0
+                with path.open('rb') as reader, destination.open('xb') as writer:
+                    while True:
+                        if cancel.is_set():raise Cancelled('Cancelled. The incomplete folder is not completed.')
+                        block=reader.read(4*1024*1024)
+                        if not block:break
+                        writer.write(block);copied+=len(block)
+                        if progress:progress({'file':relative.as_posix(),'file_index':file_index,'file_count':len(files),'rows_scanned':0,'rows_selected':0,'bytes_copied':copied,'elapsed_seconds':round(time.monotonic()-started,1)})
+                if (path.stat().st_size,path.stat().st_mtime_ns)!=stamps[path]:raise ExtractionError('A source file changed while being copied.')
+                audit['files'].append({'file':relative.as_posix(),'action':'Copy whole file','filtered':False,'input_bytes':stamps[path][0],'output_bytes':copied,'rows_scanned':0,'rows_selected':0,'ids_found':0,'status':'copied whole — unfiltered','output_file':destination.relative_to(partial).as_posix()})
+                continue
             destination = partial/'data'/(relative.with_suffix('.csv') if path.suffix.lower()=='.xlsx' else relative)
             destination.parent.mkdir(parents=True,exist_ok=True)
             scanned,matched,blank_ids,blank_records = 0,0,0,0
             file_ids = set()
             last_update = 0.0
-            report = {'file':relative.as_posix(),'input_bytes':stamps[path][0],'rows_scanned':0,'rows_selected':0,'ids_found':0,'blank_id_rows':0,'blank_records':0,'status':'running'}
+            report = {'action':'Filter by ID','filtered':True,'file':relative.as_posix(),'input_bytes':stamps[path][0],'rows_scanned':0,'rows_selected':0,'ids_found':0,'blank_id_rows':0,'blank_records':0,'status':'running'}
             cfg=configs[path]
             report.update(id_column=cfg['column'],id_column_position=cfg.get('id_index'),sheet=cfg['sheet'],header_row=layouts[path],output_file=destination.relative_to(partial).as_posix(),
                           exact_id_rows=0,case_insensitive_id_rows=0,integer_suffix_id_rows=0)
@@ -531,7 +571,7 @@ def extract(folder, selection_path, output, *, selection_column='record_id', id_
             raise Cancelled('Cancelled. The incomplete folder is not a completed extraction.')
         if any((p.stat().st_size,p.stat().st_mtime_ns)!=stamp for p,stamp in stamps.items()) or list_stamp != (selection_path.stat().st_size,selection_path.stat().st_mtime_ns):
             raise ExtractionError('Input files or the selected-id list changed during extraction.')
-        current_files,_ = discover_tables(source,selection_path,recursive)
+        current_files,_ = discover_tables(source,selection_path,recursive,source_files)
         if current_files != all_files:
             raise ExtractionError('The source folder gained or lost a source table during extraction. Retry with a stable folder.')
         # The explicit selected list and missing IDs remain local with the extracted source data.
@@ -545,7 +585,7 @@ def extract(folder, selection_path, output, *, selection_column='record_id', id_
             writer.writerow(['record_id'])
             writer.writerows([id] for id in sorted(selection.ids-coverage.keys()))
         with (partial/'file_summary.csv').open('w',encoding='utf-8-sig',newline='') as handle:
-            fields = ['file','rows_scanned','rows_selected','ids_found','blank_id_rows','blank_records','input_bytes','output_bytes','status']
+            fields = ['file','action','filtered','output_file','rows_scanned','rows_selected','ids_found','blank_id_rows','blank_records','input_bytes','output_bytes','status']
             writer = csv.DictWriter(handle,fieldnames=fields,extrasaction='ignore')
             writer.writeheader()
             writer.writerows(audit['files'])
@@ -555,7 +595,8 @@ def extract(folder, selection_path, output, *, selection_column='record_id', id_
         audit.update(status='complete',finished_utc=datetime.now(timezone.utc).isoformat(),elapsed_seconds=round(time.monotonic()-started,2),
                      ids_found_anywhere=len(coverage),ids_missing_everywhere=len(selection.ids-coverage.keys()),
                      total_rows_scanned=sum(f['rows_scanned'] for f in audit['files']),total_rows_selected=sum(f['rows_selected'] for f in audit['files']))
-        audit['zero_match_files']=[f['file'] for f in audit['files'] if f['rows_selected']==0]
+        audit['zero_match_files']=[f['file'] for f in audit['files'] if f.get('filtered') and f['rows_selected']==0]
+        audit['whole_files_copied']=sum(f.get('filtered') is False for f in audit['files'])
         (partial/'audit.json').write_text(json.dumps(audit,indent=2),encoding='utf-8')
         if output.exists():
             raise ExtractionError('The output folder appeared during processing. Choose a new folder.')

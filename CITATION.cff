@@ -5,7 +5,7 @@ type: software
 authors:
   - family-names: Xu
     given-names: Hang
-version: 1.0.0
+version: 1.1.0
 date-released: 2026-10-08
 url: "https://github.com/Hang1205/cohort-data-extractor"
 repository-code: "https://github.com/Hang1205/cohort-data-extractor"

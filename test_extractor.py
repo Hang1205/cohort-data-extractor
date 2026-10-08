@@ -343,4 +343,46 @@ class Tests(unittest.TestCase):
         self.assertFalse(self.output.exists())
 
 
+
+
+
+class MultiSourceTests(unittest.TestCase):
+    def test_mixed_actions_and_duplicate_names(self):
+        from extract_core import relative_name
+        with tempfile.TemporaryDirectory() as temp:
+            base=Path(temp);source=base/'first';other=base/'second';source.mkdir();other.mkdir()
+            selected=base/'ids.csv';selected.write_text('record_id\n001\n')
+            (source/'events.csv').write_text('record_id,value\n001,a\n002,b\n')
+            (source/'Providers.csv').write_bytes(b'provider_id,name\r\n55,fictional\r\n')
+            (other/'events.csv').write_text('PersonKey,value\n001,c\n003,d\n')
+            extra=other/'events.csv';key=relative_name(extra,source).as_posix()
+            result=extract(source,selected,base/'out',source_files=[extra],file_options={'Providers.csv':{'action':'Copy whole file'},key:{'column':'PersonKey'}})
+            self.assertEqual(result['total_rows_selected'],2)
+            self.assertEqual(result['whole_files_copied'],1)
+            self.assertEqual((base/'out/supporting_files/Providers.csv').read_bytes(),(source/'Providers.csv').read_bytes())
+            self.assertTrue((base/'out/data'/key).is_file())
+            self.assertEqual(result['ids_found_anywhere'],1)
+            self.assertNotIn('Providers.csv',result['zero_match_files'])
+
+    def test_missing_id_skipped_without_blocking(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base=Path(temp);source=base/'source';source.mkdir()
+            selected=base/'ids.csv';selected.write_text('record_id\n001\n')
+            (source/'data.csv').write_text('record_id\n001\n')
+            (source/'providers.csv').write_text('provider_id\n55\n')
+            result=extract(source,selected,base/'out',skip_invalid_files=True)
+            self.assertEqual(result['total_rows_selected'],1)
+            self.assertEqual(len(result['ignored_files']),1)
+            self.assertFalse((base/'out/data/providers.csv').exists())
+
+    def test_copy_does_not_contribute_to_coverage(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base=Path(temp);source=base/'source';source.mkdir()
+            selected=base/'ids.csv';selected.write_text('record_id\n001\n')
+            (source/'whole.csv').write_text('record_id\n001\n002\n')
+            result=extract(source,selected,base/'out',file_options={'whole.csv':{'action':'Copy whole file'}})
+            self.assertEqual(result['total_rows_selected'],0)
+            self.assertEqual(result['ids_found_anywhere'],0)
+            self.assertEqual(result['whole_files_copied'],1)
+
 if __name__=='__main__':unittest.main()

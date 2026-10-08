@@ -16,12 +16,12 @@ assert (dist_root/name).resolve().is_relative_to((root/'build_output').resolve()
 version_file=root/'work'/f'{kind}_windows_version.txt'
 product='Cohort Data Extractor'
 version_file.write_text(f'''VSVersionInfo(
-  ffi=FixedFileInfo(filevers=(1,0,0,0), prodvers=(1,0,0,0), mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)),
+  ffi=FixedFileInfo(filevers=(1,1,0,0), prodvers=(1,1,0,0), mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)),
   kids=[StringFileInfo([StringTable('040904B0',[
     StringStruct('CompanyName','Hang Xu'), StringStruct('FileDescription','{product} offline desktop GUI'),
-    StringStruct('FileVersion','1.0.0'), StringStruct('InternalName','{name}'),
+    StringStruct('FileVersion','1.1.0'), StringStruct('InternalName','{name}'),
     StringStruct('LegalCopyright','Copyright (c) 2026 Hang Xu'), StringStruct('OriginalFilename','{name}.exe'),
-    StringStruct('ProductName','{product}'), StringStruct('ProductVersion','1.0.0')])]),
+    StringStruct('ProductName','{product}'), StringStruct('ProductVersion','1.1.0')])]),
     VarFileInfo([VarStruct('Translation',[1033,1200])])])
 ''',encoding='utf-8')
 command=[sys.executable,'-m','PyInstaller','--noconfirm','--onedir','--windowed','--noupx','--name',name,

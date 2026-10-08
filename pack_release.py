@@ -8,7 +8,7 @@ import zipfile
 
 ROOT=Path(__file__).resolve().parent
 NAME='Cohort_Data_Extractor'
-VERSION='1.0.0'
+VERSION='1.1.0'
 SOURCE_NAMES=['extract_core.py','cohort_extract_gui.py','extract_cli.py','desktop_app.py','desktop_runtime.py','test_extractor.py',
               'build_windows.py','pack_release.py','Find_Python312.cmd','Start_Windows.cmd','Start_Mac.command','LICENSE','README.md',
               'DESKTOP_QUICKSTART.md','CHANGELOG.md','CITATION.cff','THIRD_PARTY_NOTICES.md','BUILD_VERIFICATION.md',

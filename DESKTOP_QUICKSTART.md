@@ -1,7 +1,14 @@
-# Windows desktop quickstart
+# Start here — v1.1.0
 
-Download the Windows Desktop ZIP from Releases (not GitHub's source-code ZIP). Extract All into a writable local folder and double-click Cohort_Data_Extractor.exe. Keep _internal beside the EXE. All source is in source/. No Python installation or internet connection is required to run this app.
+Extract ALL files from the Windows Desktop ZIP. Open Cohort_Data_Extractor.exe and keep _internal beside it. Python installation and internet are not required.
 
-Select an ID list, configure its ID column, choose the source folder, then use Files & ID columns to include/exclude files and map each source ID column. Use Test ID matching before extraction. Write to a new output folder outside the inputs. Read README.md for matching modes, Excel conversion and diagnostics.
+1. Choose your CSV/Excel ID list, worksheet and ID column.
+2. Choose your main data folder. Add files or another folder as needed.
+3. Select file rows: Filter selected uses the chosen ID column; Copy whole selected copies all records; Exclude selected omits the file. Double-click to choose a different ID column for each file.
+4. Choose a new output folder outside every source folder. Extract.
 
-The executable is Windows x64 and unsigned. Other workstation configurations have not been tested. Source execution on macOS/Linux has not been validated.
+Files without a usable ID start excluded. To include Providers.csv without patient IDs, explicitly choose Copy whole selected. It goes into supporting_files/ and contains all providers, not a patient-filtered subset. A linking-file join is not performed.
+
+Results tab shows progress. Filtered records are in data/. Whole files are separate in supporting_files/. Review file_summary.csv and audit.json for exclusions/skips. ID coverage counts only filtered rows. All data stays on your computer.
+
+For 842 SVP patients, select your already-filtered 842-ID list and IP_PATIENT_ID. Choose IP_PATIENT_ID separately for each patient table if the default record_id is absent. Missing patient IDs are never inferred.
