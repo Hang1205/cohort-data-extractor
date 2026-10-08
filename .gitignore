@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+work/
+build_output/
+*.incomplete-*/
+Diagnostics/
+Desktop_Self_Test.json
+*.local.json
+.env
+*.log
+# User datasets and extraction destinations belong outside this repository.
+local_data/
+local_output/

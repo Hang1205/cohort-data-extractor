@@ -1,0 +1,5 @@
+{
+  "Entities.csv": {"include": true, "column": "record_id", "id_index": 0, "header_row": 1},
+  "Activity.xlsx": {"include": true, "column": "entity_key", "sheet": "Data", "header_row": 1},
+  "Lookup.csv": {"include": false}
+}

@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using this metadata."
+title: "Cohort Data Extractor: Offline GUI and CLI for Selected-ID Data Extraction"
+type: software
+authors:
+  - family-names: Xu
+    given-names: Hang
+version: 1.0.0
+date-released: 2026-10-08
+url: "https://github.com/Hang1205/cohort-data-extractor"
+repository-code: "https://github.com/Hang1205/cohort-data-extractor"
+license: MIT
